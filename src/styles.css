@@ -1,0 +1,144 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Moradia Quixadá — design system
+ * Direção: Identidade regional vibrante (mural / sertão).
+ * Papel kraft: #fffcf2 • Tinta: #252422 • Terracota: #eb5e28
+ * Carvão: #403d39 • Sol/âmbar: #f59f00 • WhatsApp: #25d366
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-whatsapp: var(--whatsapp);
+  --color-papel: var(--papel);
+  --font-display: "Anton", "Arial Narrow", sans-serif;
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+:root {
+  --radius: 0.25rem;
+  --background: oklch(0.988 0.008 95);
+  --foreground: oklch(0.222 0.006 75);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.222 0.006 75);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.222 0.006 75);
+  --primary: oklch(0.645 0.197 41.5);
+  --primary-foreground: oklch(0.988 0.008 95);
+  --secondary: oklch(0.317 0.008 75);
+  --secondary-foreground: oklch(0.988 0.008 95);
+  --muted: oklch(0.945 0.012 85);
+  --muted-foreground: oklch(0.455 0.01 75);
+  --accent: oklch(0.793 0.164 75);
+  --accent-foreground: oklch(0.222 0.006 75);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0.001 106.423);
+  --border: oklch(0.222 0.006 75 / 0.1);
+  --input: oklch(0.222 0.006 75 / 0.15);
+  --ring: oklch(0.645 0.197 41.5);
+  --whatsapp: oklch(0.763 0.19 150.7);
+  --papel: oklch(0.965 0.022 88);
+}
+
+.dark {
+  --background: oklch(0.222 0.006 75);
+  --foreground: oklch(0.988 0.008 95);
+  --card: oklch(0.27 0.008 75);
+  --card-foreground: oklch(0.988 0.008 95);
+  --popover: oklch(0.27 0.008 75);
+  --popover-foreground: oklch(0.988 0.008 95);
+  --primary: oklch(0.645 0.197 41.5);
+  --primary-foreground: oklch(0.988 0.008 95);
+  --secondary: oklch(0.317 0.008 75);
+  --secondary-foreground: oklch(0.988 0.008 95);
+  --muted: oklch(0.3 0.008 75);
+  --muted-foreground: oklch(0.7 0.01 75);
+  --accent: oklch(0.793 0.164 75);
+  --accent-foreground: oklch(0.222 0.006 75);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0.003 247.858);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.645 0.197 41.5);
+  --whatsapp: oklch(0.763 0.19 150.7);
+  --papel: oklch(0.32 0.02 85);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+  }
+}
+
+/* --- Mural animations (direção v3) --- */
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pin-note {
+  0% {
+    transform: rotate(-5deg) scale(0.9);
+    opacity: 0;
+  }
+  100% {
+    transform: rotate(-1deg) scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-reveal {
+  animation: slide-up 0.8s cubic-bezier(0.19, 1, 0.22, 1) both;
+}
+
+.animate-pin {
+  animation: pin-note 0.6s cubic-bezier(0.19, 1, 0.22, 1) both;
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
