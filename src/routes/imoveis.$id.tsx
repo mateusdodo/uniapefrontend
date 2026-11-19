@@ -306,6 +306,14 @@ function ImovelDetalhe() {
                   ✔ proprietário verificado
                 </p>
               )}
+              {imovel.proprietario && !imovel.proprietario.tem_documento && (
+                <p
+                  title="O proprietário ainda não enviou a documentação de propriedade."
+                  className="mt-3 inline-block bg-amber-100 px-2 py-1 font-mono text-[10px] font-bold text-amber-950"
+                >
+                  ⚠️ Proprietário Não Verificado
+                </p>
+              )}
               <p className="mt-3 font-mono text-[10px] uppercase text-secondary/50">
                 O contato do proprietário é liberado quando sua solicitação for aceita.
               </p>

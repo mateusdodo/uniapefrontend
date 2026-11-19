@@ -8,6 +8,7 @@ import { SiteFooter } from "@/components/site-footer";
 import {
   aprovarChamado,
   buscarPessoas,
+  excluirImovel,
   listMeusImoveis,
   vincularMorador,
   type MeuImovel,
@@ -61,22 +62,73 @@ function MeusImoveisPage() {
 function ImovelCard({ imovel }: { imovel: MeuImovel }) {
   const qc = useQueryClient();
   const buscar = useServerFn(buscarPessoas);
+  const excluir = useServerFn(excluirImovel);
   const vincular = useServerFn(vincularMorador);
   const aprovar = useServerFn(aprovarChamado);
   const [termo, setTermo] = useState("");
   const [achados, setAchados] = useState<{ id: string; nome: string }[]>([]);
+  const [excluindo, setExcluindo] = useState(false);
 
   const recarregar = () => qc.invalidateQueries({ queryKey: ["meus-imoveis"] });
 
   return (
     <section className="border border-border p-5">
       <div className="flex flex-wrap justify-between gap-2">
-        <Link to="/imoveis/$id" params={{ id: imovel.id }} className="font-display text-2xl uppercase hover:text-primary">
-          {imovel.titulo}
-        </Link>
-        <span className="font-mono text-[10px] uppercase text-muted-foreground">
-          {imovel.bairro} · {imovel.ocupado ? "ocupado" : "livre"} · {imovel.aceita_solicitacoes ? "anúncio aberto" : "anúncio fechado"}
-        </span>
+        <div>
+          <Link
+            to="/imoveis/$id"
+            params={{ id: imovel.id }}
+            className="font-display text-2xl uppercase hover:text-primary"
+          >
+            {imovel.titulo}
+          </Link>
+          <p className="font-mono text-[10px] uppercase text-muted-foreground">
+            {imovel.bairro} · {imovel.ocupado ? "ocupado" : "livre"} ·{" "}
+            {imovel.aceita_solicitacoes ? "anúncio aberto" : "anúncio fechado"}
+          </p>
+        </div>
+        <div className="flex flex-col items-start gap-2 sm:items-end">
+          <button
+            type="button"
+            disabled={imovel.tem_solicitacao_aceita || excluindo}
+            title={
+              imovel.tem_solicitacao_aceita
+                ? "Uma solicitação já foi aceita; este anúncio não pode ser alterado ou excluído."
+                : undefined
+            }
+            onClick={async () => {
+              if (!window.confirm(`Tem certeza que deseja excluir "${imovel.titulo}"?`)) return;
+              setExcluindo(true);
+              try {
+                const resultado = await excluir({ data: { imovel_id: imovel.id } });
+                toast.success("Anúncio excluído.", {
+                  description: resultado.imagensRemovidas
+                    ? undefined
+                    : "O anúncio foi removido, mas algumas fotos não puderam ser apagadas.",
+                });
+                recarregar();
+              } catch (err) {
+                toast.error(
+                  err instanceof Error ? err.message : "Não foi possível excluir o anúncio.",
+                );
+              } finally {
+                setExcluindo(false);
+              }
+            }}
+            className="border border-destructive px-3 py-1.5 text-xs font-bold uppercase text-destructive disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {imovel.tem_solicitacao_aceita
+              ? "Bloqueado: solicitação aceita"
+              : excluindo
+                ? "Excluindo..."
+                : "Excluir anúncio"}
+          </button>
+          {imovel.tem_solicitacao_aceita && (
+            <p className="max-w-xs text-right text-xs text-muted-foreground">
+              O anúncio não pode ser alterado nem excluído porque uma solicitação foi aceita.
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="mt-4">

@@ -588,6 +588,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      excluir_imovel_sem_visitas_aceitas: {
+        Args: { p_imovel_id: string }
+        Returns: string[]
+      }
       pode_recrutar: {
         Args: { _moradia_id: string; _user_id: string }
         Returns: boolean

@@ -7,6 +7,13 @@ import { createImovel, getMeuPerfil } from "@/lib/moradia.functions";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { BAIRROS_QUIXADA } from "@/lib/imovel-format";
+import { supabase } from "@/integrations/supabase/client";
+
+const EXTENSOES_FOTO: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
 
 export const Route = createFileRoute("/_authenticated/anunciar")({
   head: () => ({
@@ -48,23 +55,59 @@ function AnunciarPage() {
   const [proximidade, setProximidade] = useState("");
   const [descricao, setDescricao] = useState("");
   const [comodidades, setComodidades] = useState("");
-  const [fotoUrl, setFotoUrl] = useState("");
+  const [fotosSelecionadas, setFotosSelecionadas] = useState<File[]>([]);
   const [salvando, setSalvando] = useState(false);
+
+  function selecionarFotos(arquivos: FileList | null) {
+    const selecionados = Array.from(arquivos ?? []);
+    if (selecionados.length > 5) {
+      toast.error("Selecione no máximo 5 imagens.");
+      return;
+    }
+    if (selecionados.some((arquivo) => !EXTENSOES_FOTO[arquivo.type])) {
+      toast.error("Use imagens JPG, PNG ou WebP.");
+      return;
+    }
+    if (selecionados.some((arquivo) => arquivo.size > 5 * 1024 * 1024)) {
+      toast.error("Cada imagem pode ter no máximo 5 MB.");
+      return;
+    }
+    setFotosSelecionadas(selecionados);
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSalvando(true);
+    const caminhosEnviados: string[] = [];
+    let resultado: { id: string };
     try {
       const precoNum = Number(preco.replace(",", "."));
       const nQuartos = Math.max(1, Number(quartos) || 1);
+      const usuarioId = perfil.data?.id;
       if (!Number.isFinite(precoNum) || precoNum <= 0) {
         throw new Error("Informe um preço mensal válido.");
       }
-      const fotos = fotoUrl
-        .split("\n")
-        .map((u) => u.trim())
-        .filter((u) => u.length > 0);
-      const resultado = await publicar({
+      if (fotosSelecionadas.length > 0 && !usuarioId) {
+        throw new Error("Não foi possível identificar sua conta para enviar as imagens.");
+      }
+
+      for (const arquivo of fotosSelecionadas) {
+        if (!usuarioId) {
+          throw new Error("Não foi possível identificar sua conta para enviar as imagens.");
+        }
+        const extensao = EXTENSOES_FOTO[arquivo.type];
+        const caminho = `${usuarioId}/${crypto.randomUUID()}.${extensao}`;
+        const { error } = await supabase.storage
+          .from("imoveis")
+          .upload(caminho, arquivo, { contentType: arquivo.type });
+        if (error) throw error;
+        caminhosEnviados.push(caminho);
+      }
+
+      const fotos = caminhosEnviados.map(
+        (caminho) => supabase.storage.from("imoveis").getPublicUrl(caminho).data.publicUrl,
+      );
+      resultado = await publicar({
         data: {
           titulo,
           descricao,
@@ -85,13 +128,33 @@ function AnunciarPage() {
           fotos,
         },
       });
-      toast.success("Imóvel publicado no mural!");
-      navigate({ to: "/imoveis/$id", params: { id: resultado.id } });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao publicar o imóvel.");
+      let erroAoLimpar: unknown;
+      if (caminhosEnviados.length > 0) {
+        try {
+          const { error } = await supabase.storage.from("imoveis").remove(caminhosEnviados);
+          if (error) erroAoLimpar = error;
+        } catch (cleanupError) {
+          erroAoLimpar = cleanupError;
+        }
+      }
+      if (erroAoLimpar) {
+        console.error(
+          "Não foi possível limpar as imagens de um anúncio não publicado.",
+          erroAoLimpar,
+        );
+      }
+      toast.error(err instanceof Error ? err.message : "Erro ao publicar o imóvel.", {
+        description: erroAoLimpar
+          ? "Algumas imagens enviadas não puderam ser removidas. Tente novamente mais tarde."
+          : undefined,
+      });
+      return;
     } finally {
       setSalvando(false);
     }
+    toast.success("Imóvel publicado no mural!");
+    navigate({ to: "/imoveis/$id", params: { id: resultado.id } });
   }
 
   return (
@@ -251,16 +314,40 @@ function AnunciarPage() {
               htmlFor="fotos"
               className="mb-1 block font-mono text-[10px] uppercase text-secondary/50"
             >
-              Link da foto (opcional, um por linha)
+              Fotos do imóvel (opcional, até 5 imagens)
             </label>
-            <textarea
+            <input
               id="fotos"
-              rows={2}
-              value={fotoUrl}
-              onChange={(e) => setFotoUrl(e.target.value)}
-              placeholder="https://exemplo.com/foto.jpg"
-              className="w-full border border-input bg-transparent p-3 font-mono text-xs focus:border-primary focus:outline-none"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              onChange={(e) => {
+                selecionarFotos(e.currentTarget.files);
+                e.currentTarget.value = "";
+              }}
+              className="w-full border border-input bg-transparent p-3 text-sm focus:border-primary focus:outline-none"
             />
+            <p className="mt-1 font-mono text-[10px] uppercase text-secondary/40">
+              JPG, PNG ou WebP · até 5 MB por imagem
+            </p>
+            {fotosSelecionadas.length > 0 && (
+              <ul className="mt-3 space-y-2">
+                {fotosSelecionadas.map((arquivo, indice) => (
+                  <li key={`${arquivo.name}-${indice}`} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="truncate">{arquivo.name}</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFotosSelecionadas((atuais) => atuais.filter((_, i) => i !== indice))
+                      }
+                      className="shrink-0 text-xs font-bold uppercase text-primary"
+                    >
+                      Remover
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <fieldset className="space-y-3 border border-border p-4">

@@ -322,6 +322,7 @@ function ImovelCard({
     aceita_solicitacoes: boolean;
     media_estrelas: number;
     parada_ida_minutos?: number | null;
+    proprietario_tem_documento: boolean;
   };
   delay: number;
 }) {
@@ -352,6 +353,14 @@ function ImovelCard({
         <div className={`absolute left-3 top-3 px-2 py-1 font-mono text-[10px] font-bold ${b.classe}`}>
           {b.texto}
         </div>
+        {!imovel.proprietario_tem_documento && (
+          <div
+            title="Este proprietário ainda não enviou a documentação de propriedade."
+            className="absolute right-3 top-3 max-w-[55%] bg-amber-100 px-2 py-1 text-right font-mono text-[10px] font-bold text-amber-950"
+          >
+            ⚠️ Proprietário Não Verificado
+          </div>
+        )}
         <div className="absolute bottom-3 right-3 flex items-center gap-1 bg-background/90 px-3 py-1">
           <span className="text-primary">★</span>
           <span className="text-xs font-bold">{imovel.media_estrelas.toFixed(1)}</span>

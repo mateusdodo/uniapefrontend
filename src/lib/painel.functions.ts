@@ -715,14 +715,25 @@ export type MeuImovel = {
   aceita_solicitacoes: boolean;
   moradores_podem_recrutar: boolean;
   ocupado: boolean;
+  tem_solicitacao_aceita: boolean;
   moradores: { id: string; nome: string }[];
-  chamados: { id: string; mensagem: string; vagas_procuradas: number; aprovado: boolean; ativo: boolean; autor_nome: string }[];
+  chamados: {
+    id: string;
+    mensagem: string;
+    vagas_procuradas: number;
+    aprovado: boolean;
+    ativo: boolean;
+    autor_nome: string;
+  }[];
 };
 
 export const listMeusImoveis = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ data, context }): Promise<MeuImovel[]> => {
-    { const r = await viaApi("listMeusImoveis", data); if (r !== LOCAL) return r as never; }
+    {
+      const r = await viaApi("listMeusImoveis", data);
+      if (r !== LOCAL) return r as never;
+    }
     const { data: ims, error } = await context.supabase
       .from("imoveis")
       .select("id,titulo,bairro,aceita_solicitacoes,moradores_podem_recrutar,ocupado")
@@ -731,20 +742,32 @@ export const listMeusImoveis = createServerFn({ method: "GET" })
     if (error) throw error;
     const ids = (ims ?? []).map((i) => i.id);
     if (ids.length === 0) return [];
-    const [{ data: ch }, { data: mor }] = await Promise.all([
+    const [{ data: ch }, { data: mor }, { data: aceitas, error: erroAceitas }] = await Promise.all([
       context.supabase
         .from("chamados_moradores")
-        .select("id,imovel_id,mensagem,vagas_procuradas,aprovado,ativo,autor:profiles!chamados_moradores_autor_id_fkey(nome)")
+        .select(
+          "id,imovel_id,mensagem,vagas_procuradas,aprovado,ativo,autor:profiles!chamados_moradores_autor_id_fkey(nome)",
+        )
         .in("imovel_id", ids)
         .eq("ativo", true),
       context.supabase
         .from("moradias")
-        .select("imovel_id,status,moradia_moradores(profiles!moradia_moradores_morador_id_fkey(id,nome))")
+        .select(
+          "imovel_id,status,moradia_moradores(profiles!moradia_moradores_morador_id_fkey(id,nome))",
+        )
         .in("imovel_id", ids)
         .neq("status", "encerrada"),
+      context.supabase
+        .from("solicitacoes")
+        .select("imovel_id")
+        .in("imovel_id", ids)
+        .eq("status", "aceita"),
     ]);
+    if (erroAceitas) throw erroAceitas;
+    const imoveisComAceite = new Set((aceitas ?? []).map((s) => s.imovel_id));
     return (ims ?? []).map((i) => ({
       ...i,
+      tem_solicitacao_aceita: imoveisComAceite.has(i.id),
       moradores: ((mor ?? []) as any[])
         .filter((m) => m.imovel_id === i.id)
         .flatMap((m) => (m.moradia_moradores ?? []).map((x: any) => x.profiles))
@@ -760,6 +783,40 @@ export const listMeusImoveis = createServerFn({ method: "GET" })
           autor_nome: c.autor?.nome ?? "Morador",
         })),
     }));
+  });
+
+export const excluirImovel = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data) => z.object({ imovel_id: z.string().uuid() }).parse(data))
+  .handler(async ({ data, context }) => {
+    {
+      const r = await viaApi("excluirImovel", data);
+      if (r !== LOCAL) return r as never;
+    }
+    const { data: fotos, error } = await context.supabase.rpc(
+      "excluir_imovel_sem_visitas_aceitas",
+      { p_imovel_id: data.imovel_id },
+    );
+    if (error) throw error;
+
+    const prefixo = "/storage/v1/object/public/imoveis/";
+    const caminhos = (fotos ?? []).flatMap((foto) => {
+      const inicio = foto.indexOf(prefixo);
+      if (inicio < 0) return [];
+      const caminho = foto.slice(inicio + prefixo.length);
+      return caminho.startsWith(`${context.userId}/`) ? [caminho] : [];
+    });
+    if (caminhos.length === 0) return { ok: true, imagensRemovidas: true };
+
+    const { error: erroFotos } = await context.supabase.storage.from("imoveis").remove(caminhos);
+    if (erroFotos) {
+      console.error(
+        "O anúncio foi excluído, mas não foi possível remover todas as fotos.",
+        erroFotos,
+      );
+      return { ok: true, imagensRemovidas: false };
+    }
+    return { ok: true, imagensRemovidas: true };
   });
 
 /** Proprietário vincula um inquilino que já mora no imóvel. */

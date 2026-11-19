@@ -27,6 +27,21 @@ function createPublicClient() {
   });
 }
 
+type DadosPublicosProprietario = {
+  id?: string;
+  nome?: string;
+  verificado?: boolean;
+  documento_url?: string | null;
+  media_estrelas?: number;
+  total_avaliacoes?: number;
+};
+
+function normalizarProprietario(relacao: unknown): DadosPublicosProprietario | null {
+  const proprietario = Array.isArray(relacao) ? relacao[0] : relacao;
+  if (typeof proprietario !== "object" || proprietario === null) return null;
+  return proprietario as DadosPublicosProprietario;
+}
+
 export type ImovelCard = {
   id: string;
   titulo: string;
@@ -46,6 +61,7 @@ export type ImovelCard = {
   transporte_fonte?: string | null;
   comodidades: string[];
   fotos: string[];
+  proprietario_tem_documento: boolean;
   status: "disponivel" | "esgotado" | "inativo";
   media_estrelas: number;
 };
@@ -56,11 +72,18 @@ export const listImoveis = createServerFn({ method: "GET" }).handler(async ({ da
   const { data, error } = await supabasePublic
     .from("imoveis")
     .select(
-      "id,titulo,tipo,preco_mensal,quartos,aceita_solicitacoes,moradores_podem_recrutar,ocupado,bairro,proximidade,comodidades,fotos,status,media_estrelas,parada_ida_minutos,parada_volta_minutos",
+      "id,titulo,tipo,preco_mensal,quartos,aceita_solicitacoes,moradores_podem_recrutar,ocupado,bairro,proximidade,comodidades,fotos,status,media_estrelas,parada_ida_minutos,parada_volta_minutos,proprietario:profiles!imoveis_proprietario_id_fkey(documento_url)",
     )
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return data as ImovelCard[];
+  return data.map((imovel) => {
+    const proprietario = normalizarProprietario(imovel.proprietario);
+    const { proprietario: _relacao, ...dadosImovel } = imovel;
+    return {
+      ...dadosImovel,
+      proprietario_tem_documento: Boolean(proprietario?.documento_url),
+    };
+  }) as ImovelCard[];
 });
 
 export type AvaliacaoDetalhe = {
@@ -77,6 +100,7 @@ export type ImovelDetalhe = ImovelCard & {
     id: string;
     nome: string;
     verificado: boolean;
+    tem_documento: boolean;
     media_estrelas: number;
     total_avaliacoes: number;
   } | null;
@@ -92,12 +116,24 @@ export const getImovel = createServerFn({ method: "GET" })
     const { data: imovel, error } = await supabasePublic
       .from("imoveis")
       .select(
-        "id,titulo,tipo,preco_mensal,quartos,aceita_solicitacoes,moradores_podem_recrutar,ocupado,bairro,proximidade,comodidades,fotos,status,media_estrelas,descricao,endereco,parada_ida_nome,parada_ida_minutos,parada_volta_nome,parada_volta_minutos,transporte_fonte,proprietario:profiles!imoveis_proprietario_id_fkey(id,nome,verificado,media_estrelas,total_avaliacoes)",
+        "id,titulo,tipo,preco_mensal,quartos,aceita_solicitacoes,moradores_podem_recrutar,ocupado,bairro,proximidade,comodidades,fotos,status,media_estrelas,descricao,endereco,parada_ida_nome,parada_ida_minutos,parada_volta_nome,parada_volta_minutos,transporte_fonte,proprietario:profiles!imoveis_proprietario_id_fkey(id,nome,verificado,documento_url,media_estrelas,total_avaliacoes)",
       )
       .eq("id", data.id)
       .maybeSingle();
     if (error) throw error;
     if (!imovel) return null;
+    const proprietarioRow = normalizarProprietario(imovel.proprietario);
+    const proprietario = proprietarioRow
+      ? {
+          id: proprietarioRow.id ?? "",
+          nome: proprietarioRow.nome ?? "Anunciante",
+          verificado: Boolean(proprietarioRow.verificado),
+          tem_documento: Boolean(proprietarioRow.documento_url),
+          media_estrelas: Number(proprietarioRow.media_estrelas ?? 0),
+          total_avaliacoes: Number(proprietarioRow.total_avaliacoes ?? 0),
+        }
+      : null;
+    const { proprietario: _relacao, ...dadosImovel } = imovel;
 
     const { data: avaliacoes } = await supabasePublic
       .from("avaliacoes")
@@ -114,7 +150,8 @@ export const getImovel = createServerFn({ method: "GET" })
       .order("created_at", { ascending: false });
 
     return {
-      ...(imovel as unknown as Omit<ImovelDetalhe, "avaliacoes" | "chamados">),
+      ...(dadosImovel as unknown as Omit<ImovelDetalhe, "avaliacoes" | "chamados">),
+      proprietario,
       chamados: (chamados ?? []) as any,
       avaliacoes: (avaliacoes ?? []) as unknown as AvaliacaoDetalhe[],
     } as ImovelDetalhe;
@@ -139,7 +176,7 @@ export const createImovel = createServerFn({ method: "POST" })
         bairro: z.string().min(1).max(80),
         proximidade: z.string().max(120).default(""),
         comodidades: z.array(z.string()).default([]),
-        fotos: z.array(z.string().url()).default([]),
+        fotos: z.array(z.string().url()).max(5).default([]),
         endereco: z.string().max(200).default(""),
       })
       .parse(data),
